@@ -1,0 +1,86 @@
+datasource db {
+  provider = "sqlite"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum CropStatus {
+  PLANNED
+  PLANTED
+  GROWING
+  HARVESTED
+}
+
+model Crop {
+  id          String     @id @default(cuid())
+  name        String
+  location    String?
+  status      CropStatus @default(PLANNED)
+  plantedDate DateTime?
+  harvestDate DateTime?
+  notes       String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+enum AnimalStatus {
+  ACTIVE
+  SOLD
+  DECEASED
+}
+
+model Animal {
+  id        String       @id @default(cuid())
+  name      String
+  species   String
+  breed     String?
+  birthDate DateTime?
+  status    AnimalStatus @default(ACTIVE)
+  notes     String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Task {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  dueDate     DateTime?
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+enum InventoryCategory {
+  SEED
+  FEED
+  FERTILIZER
+  EQUIPMENT
+  OTHER
+}
+
+model InventoryItem {
+  id         String            @id @default(cuid())
+  name       String
+  category   InventoryCategory @default(OTHER)
+  quantity   Float
+  unit       String
+  lowStockAt Float             @default(0)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+}
