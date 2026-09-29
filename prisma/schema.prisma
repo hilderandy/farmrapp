@@ -1,9 +1,26 @@
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 generator client {
   provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  name         String?
+  passwordHash String
+  role         Role     @default(VIEWER)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 enum CropStatus {
@@ -32,15 +49,70 @@ enum AnimalStatus {
 }
 
 model Animal {
-  id        String       @id @default(cuid())
-  name      String
-  species   String
-  breed     String?
-  birthDate DateTime?
-  status    AnimalStatus @default(ACTIVE)
+  id            String           @id @default(cuid())
+  name          String
+  species       String
+  breed         String?
+  birthDate     DateTime?
+  status        AnimalStatus     @default(ACTIVE)
+  notes         String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  milkRecords   MilkRecord[]
+  reproEvents   ReproEvent[]
+  calves        Calf[]
+}
+
+enum ReproEventType {
+  SERVICE
+  CONFIRMATION
+  CALVING
+  DRY_OFF
+}
+
+model ReproEvent {
+  id           String         @id @default(cuid())
+  animalId     String
+  animal       Animal         @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  type         ReproEventType
+  date         DateTime       @default(now())
+  notes        String?
+  semenBatchId String?
+  semenBatch   SemenBatch?    @relation(fields: [semenBatchId], references: [id], onDelete: SetNull)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
+
+model SemenBatch {
+  id           String       @id @default(cuid())
+  bullName     String
+  breed        String?
+  code         String?
+  quantity     Int          @default(0)
+  supplier     String?
+  purchaseDate DateTime?
+  notes        String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  reproEvents  ReproEvent[]
+}
+
+enum CalfSex {
+  MALE
+  FEMALE
+}
+
+model Calf {
+  id        String   @id @default(cuid())
+  motherId  String
+  mother    Animal   @relation(fields: [motherId], references: [id], onDelete: Cascade)
+  tagNumber String?
+  sex       CalfSex
+  sireName  String?
+  birthDate DateTime
   notes     String?
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum TaskStatus {
@@ -75,12 +147,128 @@ enum InventoryCategory {
 }
 
 model InventoryItem {
-  id         String            @id @default(cuid())
-  name       String
-  category   InventoryCategory @default(OTHER)
-  quantity   Float
-  unit       String
-  lowStockAt Float             @default(0)
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
+  id              String            @id @default(cuid())
+  name            String
+  category        InventoryCategory @default(OTHER)
+  quantity        Float
+  unit            String
+  lowStockAt      Float             @default(0)
+  productFamilyId String?
+  productFamily   ProductFamily?    @relation(fields: [productFamilyId], references: [id], onDelete: SetNull)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  trades          Trade[]
+}
+
+model ProductFamily {
+  id             String          @id @default(cuid())
+  name           String
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  inventoryItems InventoryItem[]
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum TransactionCategory {
+  SALES
+  SUPPLIES
+  LABOR
+  EQUIPMENT
+  MAINTENANCE
+  OTHER
+}
+
+model Transaction {
+  id               String               @id @default(cuid())
+  type             TransactionType
+  category         TransactionCategory  @default(OTHER)
+  amount           Float
+  description      String?
+  date             DateTime             @default(now())
+  contactId        String?
+  contact          Contact?             @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  expenseConceptId String?
+  expenseConcept   ExpenseConcept?      @relation(fields: [expenseConceptId], references: [id], onDelete: SetNull)
+  trade            Trade?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+}
+
+enum TradeType {
+  PURCHASE
+  SALE
+}
+
+model Trade {
+  id              String         @id @default(cuid())
+  type            TradeType
+  contactId       String?
+  contact         Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  inventoryItemId String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  description     String?
+  quantity        Float
+  unitPrice       Float
+  date            DateTime       @default(now())
+  notes           String?
+  transactionId   String?        @unique
+  transaction     Transaction?   @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model ExpenseConcept {
+  id           String           @id @default(cuid())
+  name         String
+  parentId     String?
+  parent       ExpenseConcept?  @relation("ExpenseConceptChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children     ExpenseConcept[] @relation("ExpenseConceptChildren")
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  transactions Transaction[]
+}
+
+enum ContactType {
+  SUPPLIER
+  CLIENT
+  BOTH
+}
+
+model Contact {
+  id           String        @id @default(cuid())
+  name         String
+  type         ContactType   @default(SUPPLIER)
+  ruc          String?
+  ci           String?
+  phone        String?
+  email        String?
+  address      String?
+  city         String?
+  notes        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  transactions Transaction[]
+  trades       Trade[]
+}
+
+enum MilkSession {
+  MORNING
+  EVENING
+}
+
+model MilkRecord {
+  id        String      @id @default(cuid())
+  animalId  String?
+  animal    Animal?     @relation(fields: [animalId], references: [id], onDelete: SetNull)
+  date      DateTime    @default(now())
+  session   MilkSession @default(MORNING)
+  liters    Float
+  notes     String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 }

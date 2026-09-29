@@ -1,9 +1,28 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/session";
+import { can } from "@/lib/permissions";
+
+const currency = new Intl.NumberFormat("es-PY", {
+  style: "currency",
+  currency: "PYG",
+});
 
 export default async function DashboardPage() {
-  const [cropCount, animalCount, openTasks, lowStockItems, upcomingTasks] =
-    await Promise.all([
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const user = await getCurrentUser();
+  const showFinance = can(user.role, "finance");
+
+  const [
+    cropCount,
+    animalCount,
+    openTasks,
+    lowStockItems,
+    upcomingTasks,
+    transactions,
+    milkToday,
+  ] = await Promise.all([
       prisma.crop.count(),
       prisma.animal.count({ where: { status: "ACTIVE" } }),
       prisma.task.count({ where: { status: { not: "DONE" } } }),
@@ -15,27 +34,44 @@ export default async function DashboardPage() {
         orderBy: { dueDate: "asc" },
         take: 5,
       }),
+      showFinance ? prisma.transaction.findMany() : Promise.resolve([]),
+      prisma.milkRecord.aggregate({
+        _sum: { liters: true },
+        where: { date: { gte: todayStart } },
+      }),
     ]);
 
   const lowStock = lowStockItems.filter((item) => item.quantity <= item.lowStockAt);
+  const balance = transactions.reduce(
+    (sum, t) => sum + (t.type === "INCOME" ? t.amount : -t.amount),
+    0,
+  );
 
   const stats = [
-    { label: "Crops", value: cropCount, href: "/crops" },
-    { label: "Active livestock", value: animalCount, href: "/livestock" },
-    { label: "Open tasks", value: openTasks, href: "/tasks" },
-    { label: "Low stock items", value: lowStock.length, href: "/inventory" },
+    { label: "Cultivos", value: cropCount, href: "/crops" },
+    { label: "Ganado activo", value: animalCount, href: "/livestock" },
+    {
+      label: "Leche hoy",
+      value: `${(milkToday._sum.liters ?? 0).toLocaleString("es-PY")} L`,
+      href: "/milk",
+    },
+    { label: "Tareas pendientes", value: openTasks, href: "/tasks" },
+    { label: "Ítems con poco stock", value: lowStock.length, href: "/inventory" },
+    ...(showFinance
+      ? [{ label: "Balance", value: currency.format(balance), href: "/finance" }]
+      : []),
   ];
 
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-2xl font-semibold">Farm dashboard</h1>
+        <h1 className="text-2xl font-semibold">Panel de la granja</h1>
         <p className="text-neutral-500">
-          A quick overview of what&apos;s happening on the farm.
+          Un vistazo rápido a lo que está pasando en la granja.
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {stats.map((stat) => (
           <Link
             key={stat.label}
@@ -52,9 +88,9 @@ export default async function DashboardPage() {
 
       <div className="grid gap-6 sm:grid-cols-2">
         <section className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-          <h2 className="mb-3 font-semibold">Upcoming tasks</h2>
+          <h2 className="mb-3 font-semibold">Próximas tareas</h2>
           {upcomingTasks.length === 0 ? (
-            <p className="text-sm text-neutral-500">No open tasks. Nice work!</p>
+            <p className="text-sm text-neutral-500">No hay tareas pendientes. ¡Buen trabajo!</p>
           ) : (
             <ul className="flex flex-col gap-2">
               {upcomingTasks.map((task) => (
@@ -62,36 +98,36 @@ export default async function DashboardPage() {
                   <span>{task.title}</span>
                   <span className="text-neutral-400">
                     {task.dueDate
-                      ? new Date(task.dueDate).toLocaleDateString()
-                      : "No due date"}
+                      ? new Date(task.dueDate).toLocaleDateString("es-PY")
+                      : "Sin fecha límite"}
                   </span>
                 </li>
               ))}
             </ul>
           )}
           <Link href="/tasks" className="mt-3 inline-block text-sm text-green-700 hover:underline">
-            View all tasks →
+            Ver todas las tareas →
           </Link>
         </section>
 
         <section className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-          <h2 className="mb-3 font-semibold">Low stock alerts</h2>
+          <h2 className="mb-3 font-semibold">Alertas de stock bajo</h2>
           {lowStock.length === 0 ? (
-            <p className="text-sm text-neutral-500">Inventory levels look healthy.</p>
+            <p className="text-sm text-neutral-500">Los niveles de inventario están bien.</p>
           ) : (
             <ul className="flex flex-col gap-2">
               {lowStock.map((item) => (
                 <li key={item.id} className="flex items-center justify-between text-sm">
                   <span>{item.name}</span>
                   <span className="text-red-600">
-                    {item.quantity} {item.unit} left
+                    quedan {item.quantity} {item.unit}
                   </span>
                 </li>
               ))}
             </ul>
           )}
           <Link href="/inventory" className="mt-3 inline-block text-sm text-green-700 hover:underline">
-            View inventory →
+            Ver inventario →
           </Link>
         </section>
       </div>
